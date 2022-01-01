@@ -1,0 +1,8 @@
+{
+    "digits": 3,
+    "fade_speed": 0.05,
+    "offset_delay": 0.5,
+    "seg_width": 8,
+    "seg_height": 3,
+    "time_zone": 1
+}
