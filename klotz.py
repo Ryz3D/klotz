@@ -5,6 +5,7 @@ from aiohttp import web
 
 """
 TODO:
+    - kill process with only one Ctrl+C
     - (startup) animations
         - fade
         - buildup
@@ -23,6 +24,7 @@ settings = {
     "seg_width": 8,
     "seg_height": 3,
     "time_zone": 1,
+    "timer_blinks": 4,
 }
 
 if os.path.isfile("settings.json"):
@@ -98,7 +100,7 @@ def timer_to_str(include_dots=False):
         else:
             return str(ss).zfill(2) + ("." if include_dots else "") + "00"
     else:
-        for rep in range(4):
+        for rep in range(settings["timer_blinks"]):
             for i in range(module_count):
                 led.setPixelColor(i, Color(255, 255, 255))
             led.show()
@@ -110,6 +112,7 @@ def timer_to_str(include_dots=False):
             led.show()
             time.sleep(0.4)
         timer_length = 0
+        set_hsv = (0, 0, 0)
         return ""
 
 
@@ -136,7 +139,15 @@ def loop():
                 time=loop_time,
             )
         )
-        data = data[1:]
+        if data_override:
+            pass
+        elif timer_str:
+            data = data[:2]
+        else:
+            if loop_time % 4 < 2:
+                data = data[:2]
+            else:
+                data = data[2:]
         if len(data) <= settings["digits"]:
             data_offset = 0
             last_offset = loop_time
@@ -234,7 +245,6 @@ async def handle_color_get(req: web.Request):
 async def handle_color_set(req: web.Request):
     global new_hsv
     new_hsv = tuple(map(lambda s: float(s), (await req.text()).split(",")))
-    print(new_hsv)
     return web.Response(text="OK")
 
 
@@ -281,6 +291,9 @@ async def handle_text_set(req: web.Request):
     data_override = await req.text()
     if data_override == "clear":
         data_override = ""
+        print("text cleared")
+    else:
+        print("displaying '{}'".format(data_override))
     return web.Response(text="OK")
 
 
