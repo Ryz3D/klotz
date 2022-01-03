@@ -40,6 +40,7 @@ module_count = settings["digits"] * module_size
 
 new_hsv = (0.0, 0.0, 0.0)
 set_hsv = (0.0, 0.0, 0.0)
+powered = False
 
 seg_indices = []
 for i in range(7):
@@ -68,8 +69,9 @@ if os.path.isfile("last_data.json"):
     with open("last_data.json") as save_file:
         d = json.loads(save_file.read())
         new_hsv = tuple(map(lambda s: float(s), d["color"].split(" ")))
-        current_cmode = int(d["cmode"])
-        current_dmode = int(d["dmode"])
+        powered = d["powered"] == 1
+        current_cmode = d["cmode"]
+        current_dmode = d["dmode"]
 
 
 led = PixelStrip(module_count, 18, 400000, 10, True, 255, 0)
@@ -126,10 +128,11 @@ def loop():
     while run_loop:
         loop_time = time.time() + settings["time_zone"] * 3600
 
+        fade_to = new_hsv if powered else (set_hsv[0], set_hsv[1], 0)
         set_hsv = (
-            lerp_angle(set_hsv[0], new_hsv[0], settings["fade_speed"]),
-            lerp(set_hsv[1], new_hsv[1], settings["fade_speed"]),
-            lerp(set_hsv[2], new_hsv[2], settings["fade_speed"]),
+            lerp_angle(set_hsv[0], fade_to, settings["fade_speed"]),
+            lerp(set_hsv[1], fade_to, settings["fade_speed"]),
+            lerp(set_hsv[2], fade_to, settings["fade_speed"]),
         )
         timer_str = "" if timer_length == 0 else timer_to_str()
         data = (
@@ -159,12 +162,12 @@ def loop():
 
         for digit in range(settings["digits"]):
             if digit + data_offset < 0 or digit + data_offset >= len(data):
-                powered = segments(" ")
+                seg_powered = segments(" ")
             else:
-                powered = segments(data[digit + data_offset])
+                seg_powered = segments(data[digit + data_offset])
             for seg in range(module_size):
                 index = digit * module_size + seg
-                if powered[seg_indices[seg]]:
+                if seg_powered[seg_indices[seg]]:
                     digit_x = seg_positions[seg][0] / (w + 1)
                     global_pos = (
                         (digit_x + digit * 1.3) / (settings["digits"] * 1.3 - 0.3),
@@ -248,6 +251,16 @@ async def handle_color_set(req: web.Request):
     return web.Response(text="OK")
 
 
+async def handle_power_get(req: web.Request):
+    return web.Response(text="ON" if powered else "OFF")
+
+
+async def handle_power_set(req: web.Request):
+    global powered
+    powered = await req.text() == "ON"
+    return web.Response(text="OK")
+
+
 async def handle_timerstr_get(req: web.Request):
     global timer_length
     now = time.time()
@@ -310,8 +323,9 @@ def atexit():
             json.dumps(
                 {
                     "color": "{} {} {}".format(*new_hsv),
-                    "cmode": str(current_cmode),
-                    "dmode": str(current_dmode),
+                    "powered": 1 if powered else 0,
+                    "cmode": current_cmode,
+                    "dmode": current_dmode,
                 }
             )
         )
@@ -336,6 +350,8 @@ def start():
             web.put("/dmode", handle_dmode_set),
             web.get("/color", handle_color_get),
             web.put("/color", handle_color_set),
+            web.get("/power", handle_power_get),
+            web.put("/power", handle_power_set),
             web.get("/timerstr", handle_timerstr_get),
             web.get("/timer", handle_timer_get),
             web.put("/timer", handle_timer_set),
