@@ -130,9 +130,9 @@ def loop():
 
         fade_to = new_hsv if powered else (set_hsv[0], set_hsv[1], 0)
         set_hsv = (
-            lerp_angle(set_hsv[0], fade_to, settings["fade_speed"]),
-            lerp(set_hsv[1], fade_to, settings["fade_speed"]),
-            lerp(set_hsv[2], fade_to, settings["fade_speed"]),
+            lerp_angle(set_hsv[0], fade_to[0], settings["fade_speed"]),
+            lerp(set_hsv[1], fade_to[1], settings["fade_speed"]),
+            lerp(set_hsv[2], fade_to[2], settings["fade_speed"]),
         )
         timer_str = "" if timer_length == 0 else timer_to_str()
         data = (
