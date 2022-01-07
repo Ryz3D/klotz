@@ -82,8 +82,23 @@ for i in range(module_count):
 led.show()
 
 
+def save_data():
+    with open("last_data.json", "w") as save_file:
+        save_file.write(
+            json.dumps(
+                {
+                    "color": "{} {} {}".format(*new_hsv),
+                    "powered": 1 if powered else 0,
+                    "cmode": current_cmode,
+                    "dmode": current_dmode,
+                }
+            )
+        )
+
+
 def timer_to_str(include_dots=False):
     global timer_length
+    global set_hsv
 
     delta = timer_length - time.time() + timer_start
     if delta >= 60:
@@ -134,23 +149,16 @@ def loop():
             lerp(set_hsv[1], fade_to[1], settings["fade_speed"]),
             lerp(set_hsv[2], fade_to[2], settings["fade_speed"]),
         )
+
         timer_str = "" if timer_length == 0 else timer_to_str()
         data = (
             data_override
             or timer_str
             or data_mode(
-                time=loop_time,
+                settings=settings,  # entire settings dict
+                time=loop_time,  # unix time
             )
         )
-        if data_override:
-            pass
-        elif timer_str:
-            data = data[:2]
-        else:
-            if loop_time % 4 < 2:
-                data = data[:2]
-            else:
-                data = data[2:]
         if len(data) <= settings["digits"]:
             data_offset = 0
             last_offset = loop_time
@@ -164,10 +172,21 @@ def loop():
             if digit + data_offset < 0 or digit + data_offset >= len(data):
                 seg_powered = segments(" ")
             else:
-                seg_powered = segments(data[digit + data_offset])
+                data_digit = data[digit + data_offset]
+                if len(data_digit) == 1:
+                    seg_powered = segments(data_digit)
+                else:
+                    seg_powered = data_digit
+
             for seg in range(module_size):
                 index = digit * module_size + seg
-                if seg_powered[seg_indices[seg]]:
+                this_powered = False
+                if len(seg_powered) == 8:
+                    this_powered = seg_powered[seg_indices[seg]]
+                else:
+                    this_powered = seg_powered[seg]
+
+                if this_powered:
                     digit_x = seg_positions[seg][0] / (w + 1)
                     global_pos = (
                         (digit_x + digit * 1.3) / (settings["digits"] * 1.3 - 0.3),
@@ -229,6 +248,7 @@ async def handle_cmode_get(req: web.Request):
 
 async def handle_cmode_set(req: web.Request):
     load_cmode(int(await req.text()) - 1)
+    save_data()
     return web.Response(text="OK")
 
 
@@ -238,16 +258,21 @@ async def handle_dmode_get(req: web.Request):
 
 async def handle_dmode_set(req: web.Request):
     load_dmode(int(await req.text()) - 1)
+    save_data()
     return web.Response(text="OK")
 
 
 async def handle_color_get(req: web.Request):
+    print("get {},{},{}".format(*map(lambda s: int(s), new_hsv)))
     return web.Response(text="{},{},{}".format(*map(lambda s: int(s), new_hsv)))
 
 
 async def handle_color_set(req: web.Request):
     global new_hsv
-    new_hsv = tuple(map(lambda s: float(s), (await req.text()).split(",")))
+    text = await req.text()
+    print("set {}".format(text))
+    new_hsv = tuple(map(lambda s: float(s), text.split(",")))
+    save_data()
     return web.Response(text="OK")
 
 
@@ -258,6 +283,7 @@ async def handle_power_get(req: web.Request):
 async def handle_power_set(req: web.Request):
     global powered
     powered = await req.text() == "ON"
+    save_data()
     return web.Response(text="OK")
 
 
@@ -318,19 +344,7 @@ def atexit():
     if loop_thread.is_alive():
         loop_thread.join()
 
-    with open("last_data.json", "w") as save_file:
-        save_file.write(
-            json.dumps(
-                {
-                    "color": "{} {} {}".format(*new_hsv),
-                    "powered": 1 if powered else 0,
-                    "cmode": current_cmode,
-                    "dmode": current_dmode,
-                }
-            )
-        )
-
-    print("data saved")
+    save_data()
 
 
 def start():
